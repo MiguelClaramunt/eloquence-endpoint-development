@@ -9,8 +9,15 @@ services:
     working_dir: /app
     ports:
       - "8080:8080"
+    networks:
+      - hpc_internal
     environment:
       - HF_TOKEN=${HF_TOKEN}
     entrypoint: ["python3", "whisper_api_python.py"]
     # entrypoint: ["python3", "openai_woz_api.py"]
     restart: unless-stopped
+
+networks:
+  # No outbound internet; only container-to-container on this network.
+  hpc_internal:
+    internal: true
