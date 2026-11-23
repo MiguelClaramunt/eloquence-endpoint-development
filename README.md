@@ -94,7 +94,46 @@ curl http://localhost:8080/v1/audio/transcriptions -F file=@EloqConv_00.wav
 curl http://localhost:8080/v1/audio/transcriptions -F file=@tts_test.mp3 -F model=""
 ```
 
-## 2.3) API Schema: **Follow OpenAI format** **Follow OpenAI format**
+## 2.3) Device configuration (GPU / CPU auto-detection)
+
+The endpoint **auto-detects** whether a usable CUDA GPU is present and falls
+back to **CPU** when none is found. This matters because the HPC target may be
+a **CPU-only host** (no outbound internet, no GPU). Detection runs `nvidia-smi`
+first, then `torch.cuda.is_available()`; both are wrapped so a broken or absent
+CUDA stack can never crash the endpoint at import time.
+
+Every knob is overridable via environment variables (all optional — leave them
+unset to auto-detect):
+
+| Variable | Values | Default |
+|---|---|---|
+| `WHISPER_DEVICE` | `cuda` \| `cpu` | auto-detect (cuda if present, else cpu) |
+| `WHISPER_COMPUTE_TYPE` | e.g. `float16`, `int8` | `float16` on CUDA, `int8` on CPU |
+| `WHISPER_BATCH_SIZE` | int ≥ 1 | `16` on CUDA, `1` on CPU (memory-safe) |
+
+Defaults are chosen so a **GPU node behaves exactly as before** (float16,
+batch 16) while a **CPU node** picks a low-memory, low-batch configuration that
+will actually run.
+
+Override from the host environment (compose passes these through as empty when
+unset, which the code treats as “auto”):
+
+```bash
+# Force CPU explicitly (e.g. debugging on a laptop with no GPU driver)
+WHISPER_DEVICE=cpu WHISPER_BATCH_SIZE=1 docker compose up
+
+# Force CUDA and raise throughput on a beefy GPU
+WHISPER_DEVICE=cuda WHISPER_BATCH_SIZE=32 WHISPER_COMPUTE_TYPE=float16 docker compose up
+```
+
+…or inline in `docker-compose.yml` under the `whisper` service’s
+`environment:` block (already wired up — all three are optional).
+
+**⚠️ Keep models loaded at import time.** Device resolution happens at import;
+the Whisper model and align model are loaded exactly as before, and heavy
+initialization still never happens inside a request handler.
+
+## 2.4) API Schema: **Follow OpenAI format** **Follow OpenAI format**
 
 - **Chat Completions**: `POST /v1/chat/completions`
     - Spec: https://platform.openai.com/docs/api-reference/chat/create
@@ -111,9 +150,9 @@ curl http://localhost:8080/v1/audio/transcriptions -F file=@tts_test.mp3 -F mode
 **⚠️ Load models at module import time. ⚠️** All heavy initialization and model loading must occur when the Python module is first imported, not within request-handling functions. Avoid calling `from_pretrained()` or any similar model constructor inside a route such as `@app.post`, because every incoming request would reinitialize the model in GPU memory. This behavior leads to GPU memory exhaustion (OOM) and extreme latency due to repeated loading. Placing model loading at module import ensures a single shared model instance is maintained throughout the process lifetime, improving throughput and stability.
 
 
-## 2.4) Examples
+## 2.5) Examples
 
-### 2.4.1) Speech-Text WOZ Endpoint (FastAPI + custom model)
+### 2.5.1) Speech-Text WOZ Endpoint (FastAPI + custom model)
 
 ```python
 from fastapi import FastAPI
@@ -176,7 +215,7 @@ if __name__ == "__main__":
 
 ```
 
-### 2.4.2) Example: WhisperX Transcription Endpoint
+### 2.5.2) Example: WhisperX Transcription Endpoint
 
 ```python
 from fastapi import FastAPI, UploadFile, File

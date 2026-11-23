@@ -13,6 +13,13 @@ services:
       - hpc_internal
     environment:
       - HF_TOKEN=${HF_TOKEN}
+      # GPU/CPU knobs for the whisper endpoint (leave unset to auto-detect):
+      #   WHISPER_DEVICE=cuda|cpu   (default: auto-detect, cuda-if-present)
+      #   WHISPER_BATCH_SIZE=int    (default: 16 on cuda, 1 on cpu)
+      #   WHISPER_COMPUTE_TYPE=...  (default: float16 on cuda, int8 on cpu)
+      - WHISPER_DEVICE=${WHISPER_DEVICE:-}
+      - WHISPER_BATCH_SIZE=${WHISPER_BATCH_SIZE:-}
+      - WHISPER_COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE:-}
     entrypoint: ["python3", "whisper_api_python.py"]
     # entrypoint: ["python3", "openai_woz_api.py"]
     restart: unless-stopped
